@@ -15,15 +15,15 @@ try:
 except:
     pass
 
-# ⚠️ LES COORDONNÉES Y (En points, depuis le BAS de la page) ⚠️
-Y_DATE     = 470
-Y_HEURE    = 455
-Y_DISTANCE = 440
+# ⚠️ LES NOUVELLES COORDONNÉES EXACTES (Calculées grâce à ta capture) ⚠️
+Y_DATE     = 625
+Y_HEURE    = 610
+Y_DISTANCE = 595
 
-Y_CHARGE   = 330
-Y_TTC      = 310
-Y_TVA      = 280
-Y_HT       = 265
+Y_CHARGE   = 495
+Y_TTC      = 470
+Y_TVA      = 445
+Y_HT       = 430
 
 def build_ticket_overlay(date, depart, arrivee, distance, prix_ttc):
     ht  = prix_ttc / 1.10
@@ -40,14 +40,14 @@ def build_ticket_overlay(date, depart, arrivee, distance, prix_ttc):
     c = canvas.Canvas(packet, pagesize=(page_w, page_h))
 
     def hide_and_write(text, x, y, width, height=12, font='OCRB', size=6.5, align='right'):
-        """Dessine un rectangle blanc puis écrit le texte avec un effet d'encre thermique"""
+        """Dessine un rectangle gris très clair (pour cacher) puis le texte thermique"""
         c.saveState()
         
-        # 1. Rectangle pour cacher (Gris très clair pour fusionner avec le papier scanné)
+        # 1. Rectangle pour cacher les anciens chiffres (plus large pour être sûr)
         c.setFillColorRGB(0.98, 0.98, 0.98) 
         c.rect(x, y - 2, width, height, fill=1, stroke=0)
         
-        # 2. Couleur du texte : Gris foncé au lieu du Noir pur (Imite l'encre thermique)
+        # 2. Couleur Gris Thermique
         c.setFillColorRGB(0.22, 0.22, 0.22) 
         
         has_euro = '\u20AC' in text
@@ -65,14 +65,14 @@ def build_ticket_overlay(date, depart, arrivee, distance, prix_ttc):
         
         start_x = x
         if align == 'right':
+            # On colle tout bien à droite du rectangle blanc
             start_x = x + width - total_w
             
-        # Écrire le texte de base (avec un micro-décalage pour épaissir la police)
+        # Effet gras thermique (double tracé avec micro décalage)
         c.setFont(font, size)
         c.drawString(start_x, y, base_text)
         c.drawString(start_x + 0.15, y, base_text) 
         
-        # Ajouter l'Euro si nécessaire
         if has_euro:
             c.setFont('Helvetica', size)
             c.drawString(start_x + tw_base, y, ' \u20AC')
@@ -80,34 +80,33 @@ def build_ticket_overlay(date, depart, arrivee, distance, prix_ttc):
             
         c.restoreState()
 
-    # --- CACHER ET REMPLACER (On aligne tout à droite dans des "boîtes") ---
+    # --- CACHER ET REMPLACER ---
     
-    # Date (Boîte commence à x=80, largeur 75)
-    hide_and_write(date, x=80, y=Y_DATE, width=75)
+    # Bloc du Haut (Date, Heure, Distance) - x reculé à 70 et width augmenté à 85 pour couvrir largement
+    hide_and_write(date, x=70, y=Y_DATE, width=85)
     
-    # Heure: on sépare Départ et Arrivée pour la précision
     hide_and_write(depart, x=45, y=Y_HEURE, width=30, align='left')
-    hide_and_write(arrivee, x=120, y=Y_HEURE, width=35, align='right')
+    hide_and_write(arrivee, x=115, y=Y_HEURE, width=40, align='right')
     
-    # Distance
-    hide_and_write(f"{distance} km", x=80, y=Y_DISTANCE, width=75)
+    hide_and_write(f"{distance} km", x=70, y=Y_DISTANCE, width=85)
     
-    # Prise en charge
-    hide_and_write(f"2.94 \u20AC", x=100, y=Y_CHARGE, width=55)
+    # Bloc du Bas (Prix)
+    hide_and_write(f"2.94 \u20AC", x=90, y=Y_CHARGE, width=65)
     
-    # TOTAL TTC (Plus grand, en gras)
+    # TOTAL TTC (Font plus grand)
     c.setFont('OCRB', 11)
-    hide_and_write(f"{prix_ttc:.2f} \u20AC", x=80, y=Y_TTC, width=75, size=11)
-    hide_and_write(f"{prix_ttc:.2f} \u20AC", x=80.4, y=Y_TTC, width=0, size=11, align='left') 
+    hide_and_write(f"{prix_ttc:.2f} \u20AC", x=70, y=Y_TTC, width=85, size=11)
+    # Effet Extra-Gras pour le TTC
+    hide_and_write(f"{prix_ttc:.2f} \u20AC", x=70.4, y=Y_TTC, width=0, size=11, align='left') 
     
     # TVA & HT
-    hide_and_write(f"{tva:.2f} \u20AC", x=100, y=Y_TVA, width=55)
-    hide_and_write(f"{ht:.2f} \u20AC", x=100, y=Y_HT, width=55)
+    hide_and_write(f"{tva:.2f} \u20AC", x=90, y=Y_TVA, width=65)
+    hide_and_write(f"{ht:.2f} \u20AC", x=90, y=Y_HT, width=65)
 
     c.save()
     packet.seek(0)
 
-    # Fusionner
+    # Fusion des calques
     new_pdf = PdfReader(packet)
     overlay_page = new_pdf.pages[0]
     page.merge_page(overlay_page)
