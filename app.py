@@ -10,7 +10,7 @@ FONT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'OCR-B.ttf'
 # ⚠️ NOUVELLES COORDONNÉES EXACTES (Pour séparer les chiffres) ⚠️
 
 # --- LA DATE --- (Entre les slashes / / )
-X_DATE_J = 440   # Jour (23)
+X_DATE_J = 430   # Jour (23)
 X_DATE_M = 530   # Mois (02)
 X_DATE_A = 615   # Année (2026)
 
