@@ -15,21 +15,20 @@ try:
 except:
     pass
 
-# ⚠️ LES COORDONNÉES À AJUSTER (En points, depuis le BAS de la page) ⚠️
-# Zid wla n9ess f had l'ar9am 7ta yti7 lk lktaba jdida fo9 l9dima las9a
-Y_DATE     = 285
-Y_HEURE    = 270
-Y_DISTANCE = 255
-Y_CHARGE   = 195
-Y_TTC      = 180
-Y_TVA      = 165
-Y_HT       = 150
+# ⚠️ LES COORDONNÉES Y (En points, depuis le BAS de la page) ⚠️
+Y_DATE     = 470
+Y_HEURE    = 455
+Y_DISTANCE = 440
+
+Y_CHARGE   = 330
+Y_TTC      = 310
+Y_TVA      = 280
+Y_HT       = 265
 
 def build_ticket_overlay(date, depart, arrivee, distance, prix_ttc):
     ht  = prix_ttc / 1.10
     tva = prix_ttc - ht
 
-    # 1. Lire le PDF original
     original_path = os.path.join(os.path.dirname(__file__), 'original.pdf')
     reader = PdfReader(original_path)
     page = reader.pages[0]
@@ -37,49 +36,81 @@ def build_ticket_overlay(date, depart, arrivee, distance, prix_ttc):
     page_w = float(page.mediabox.width)
     page_h = float(page.mediabox.height)
 
-    # 2. Créer le calque (overlay) avec ReportLab
     packet = io.BytesIO()
     c = canvas.Canvas(packet, pagesize=(page_w, page_h))
 
-    def hide_and_write(text, x, y, width, height=12, font='OCRB', size=6.5):
-        """Dessine un rectangle blanc puis écrit le texte"""
+    def hide_and_write(text, x, y, width, height=12, font='OCRB', size=6.5, align='right'):
+        """Dessine un rectangle blanc puis écrit le texte avec un effet d'encre thermique"""
         c.saveState()
-        # Rectangle blanc pour cacher l'ancien texte
-        c.setFillColorRGB(1, 1, 1) 
+        
+        # 1. Rectangle pour cacher (Gris très clair pour fusionner avec le papier scanné)
+        c.setFillColorRGB(0.98, 0.98, 0.98) 
         c.rect(x, y - 2, width, height, fill=1, stroke=0)
         
-        # Nouveau texte en noir
-        c.setFillColorRGB(0, 0, 0) 
+        # 2. Couleur du texte : Gris foncé au lieu du Noir pur (Imite l'encre thermique)
+        c.setFillColorRGB(0.22, 0.22, 0.22) 
+        
+        has_euro = '\u20AC' in text
+        base_text = text.replace(' \u20AC', '')
+        
         c.setFont(font, size)
-        c.drawString(x, y, text)
+        tw_base = c.stringWidth(base_text, font, size)
+        tw_euro = 0
+        
+        if has_euro:
+            c.setFont('Helvetica', size)
+            tw_euro = c.stringWidth(' \u20AC', 'Helvetica', size)
+            
+        total_w = tw_base + tw_euro
+        
+        start_x = x
+        if align == 'right':
+            start_x = x + width - total_w
+            
+        # Écrire le texte de base (avec un micro-décalage pour épaissir la police)
+        c.setFont(font, size)
+        c.drawString(start_x, y, base_text)
+        c.drawString(start_x + 0.15, y, base_text) 
+        
+        # Ajouter l'Euro si nécessaire
+        if has_euro:
+            c.setFont('Helvetica', size)
+            c.drawString(start_x + tw_base, y, ' \u20AC')
+            c.drawString(start_x + tw_base + 0.15, y, ' \u20AC')
+            
         c.restoreState()
 
-    # --- CACHER ET REMPLACER (x = distance depuis la gauche) ---
-    # On cache la partie droite (à partir de x=80 points)
+    # --- CACHER ET REMPLACER (On aligne tout à droite dans des "boîtes") ---
     
-    hide_and_write(date, x=100, y=Y_DATE, width=60)
+    # Date (Boîte commence à x=80, largeur 75)
+    hide_and_write(date, x=80, y=Y_DATE, width=75)
     
-    # Heure: on cache "12:54 Arrivée:13:52"
-    hide_and_write(f"{depart}  Arrivée:{arrivee}", x=50, y=Y_HEURE, width=110)
+    # Heure: on sépare Départ et Arrivée pour la précision
+    hide_and_write(depart, x=45, y=Y_HEURE, width=30, align='left')
+    hide_and_write(arrivee, x=120, y=Y_HEURE, width=35, align='right')
     
-    hide_and_write(f"{distance} km", x=100, y=Y_DISTANCE, width=60)
+    # Distance
+    hide_and_write(f"{distance} km", x=80, y=Y_DISTANCE, width=75)
     
-    hide_and_write(f"2.94 \u20AC", x=110, y=Y_CHARGE, width=50)
+    # Prise en charge
+    hide_and_write(f"2.94 \u20AC", x=100, y=Y_CHARGE, width=55)
     
-    # TOTAL TTC (Plus grand)
-    hide_and_write(f"{prix_ttc:.2f} \u20AC", x=90, y=Y_TTC, width=70, size=11)
+    # TOTAL TTC (Plus grand, en gras)
+    c.setFont('OCRB', 11)
+    hide_and_write(f"{prix_ttc:.2f} \u20AC", x=80, y=Y_TTC, width=75, size=11)
+    hide_and_write(f"{prix_ttc:.2f} \u20AC", x=80.4, y=Y_TTC, width=0, size=11, align='left') 
     
-    hide_and_write(f"{tva:.2f} \u20AC", x=100, y=Y_TVA, width=60)
-    hide_and_write(f"{ht:.2f} \u20AC", x=100, y=Y_HT, width=60)
+    # TVA & HT
+    hide_and_write(f"{tva:.2f} \u20AC", x=100, y=Y_TVA, width=55)
+    hide_and_write(f"{ht:.2f} \u20AC", x=100, y=Y_HT, width=55)
 
     c.save()
     packet.seek(0)
 
-    # 3. Fusionner (Merge)
+    # Fusionner
     new_pdf = PdfReader(packet)
     overlay_page = new_pdf.pages[0]
-    
-    page.merge_page(overlay_page) # Lessa9 jdid fo9 l9dim
+    page.merge_page(overlay_page)
     
     output = PdfWriter()
     output.add_page(page)
