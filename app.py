@@ -7,33 +7,34 @@ app = Flask(__name__)
 # ── Font setup ──────────────────────────────────────────
 FONT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'OCR-B.ttf')
 
-# ⚠️ RÉGLAGES DES COORDONNÉES EN PIXELS ⚠️
-# Dans une image, Y=0 est tout en HAUT. Plus Y grandit, plus on descend.
-# X_RIGHT est la limite à droite pour aligner les prix.
-X_LEFT     = 200   
-X_RIGHT    = 800   
+# ⚠️ COORDONNÉES EXACTES POUR IMAGE 739 x 2000 px ⚠️
+X_MARGIN_RIGHT = 680   # Alignement général à droite (Date)
+X_PRICE_RIGHT  = 620   # Alignement des prix (juste avant le symbole € et km)
+X_DEPART       = 240   # Position Heure Départ (après "Départ:")
+X_ARRIVEE      = 540   # Position Heure Arrivée (après "Arrivée.")
 
-Y_DATE     = 550
-Y_HEURE    = 600
-Y_DISTANCE = 650
+# Positions Y (Hauteur de haut en bas) calculées sur 2000px
+Y_DATE     = 390
+Y_HEURE    = 440
+Y_DISTANCE = 490
 
-Y_CHARGE   = 950
-Y_TTC      = 1000
-Y_TVA      = 1050
-Y_HT       = 1100
+Y_CHARGE   = 780
+Y_TTC      = 865
+Y_TVA      = 940
+Y_HT       = 990
 
 def build_ticket_image(date, depart, arrivee, distance, prix_ttc):
     ht  = prix_ttc / 1.10
     tva = prix_ttc - ht
 
-    # 1. Ouvrir l'image originale vide
+    # 1. Ouvrir le template 739x2000
     img_path = os.path.join(os.path.dirname(__file__), 'template.png')
     img = Image.open(img_path).convert("RGB")
     draw = ImageDraw.Draw(img)
 
-    # 2. Tailles de police (Ajuster selon la taille de l'image)
-    SIZE_NORMAL = 28
-    SIZE_TTC    = 38
+    # 2. Tailles de police (Ajustées pour 2000px de hauteur)
+    SIZE_NORMAL = 34
+    SIZE_TTC    = 52
 
     try:
         font = ImageFont.truetype(FONT_PATH, SIZE_NORMAL)
@@ -42,58 +43,35 @@ def build_ticket_image(date, depart, arrivee, distance, prix_ttc):
         font = ImageFont.load_default()
         font_ttc = font
 
-    # Police pour l'Euro
-    try:
-        font_euro = ImageFont.truetype("DejaVuSans.ttf", SIZE_NORMAL)
-        font_euro_ttc = ImageFont.truetype("DejaVuSans.ttf", SIZE_TTC)
-    except:
-        font_euro = font
-        font_euro_ttc = font_ttc
+    # Couleur "Encre thermique" (Gris très foncé, naturel)
+    COLOR_INK = (40, 40, 40)
 
-    # Couleur "Encre thermique" (Gris foncé, pas noir pur)
-    COLOR_INK = (50, 50, 50)
-
-    def write_text(text, x, y, fnt=font, fnt_euro=font_euro, align='right'):
-        has_euro = '\u20AC' in text
-        base_text = text.replace(' \u20AC', '')
-
-        # Calculer la largeur
-        bbox = draw.textbbox((0, 0), base_text, font=fnt)
-        tw_base = bbox[2] - bbox[0]
-        
-        tw_euro = 0
-        if has_euro:
-            bbox_euro = draw.textbbox((0, 0), ' \u20AC', font=fnt_euro)
-            tw_euro = bbox_euro[2] - bbox_euro[0]
-
-        total_w = tw_base + tw_euro
+    def write_text(text, x, y, fnt=font, align='right'):
+        """Écrit le texte sans s'occuper de l'Euro, car il est sur l'image"""
+        bbox = draw.textbbox((0, 0), text, font=fnt)
+        tw = bbox[2] - bbox[0]
         
         start_x = x
         if align == 'right':
-            start_x = x - total_w # Aligner à droite par rapport à X
+            start_x = x - tw # Aligner à droite par rapport à X
 
-        # Dessiner le texte de base
-        draw.text((start_x, y), base_text, font=fnt, fill=COLOR_INK)
-        draw.text((start_x + 1, y), base_text, font=fnt, fill=COLOR_INK) # Effet gras
-
-        # Dessiner l'Euro
-        if has_euro:
-            draw.text((start_x + tw_base, y), ' \u20AC', font=fnt_euro, fill=COLOR_INK)
-            draw.text((start_x + tw_base + 1, y), ' \u20AC', font=fnt_euro, fill=COLOR_INK)
+        # Dessiner le texte de base avec un léger effet d'encre (double tracé)
+        draw.text((start_x, y), text, font=fnt, fill=COLOR_INK)
+        draw.text((start_x + 1, y), text, font=fnt, fill=COLOR_INK)
 
     # --- ÉCRITURE SUR L'IMAGE ---
     
-    # Date, Heure, Distance
-    write_text(date, x=X_RIGHT, y=Y_DATE)
-    write_text(depart, x=X_LEFT, y=Y_HEURE, align='left')
-    write_text(arrivee, x=X_RIGHT, y=Y_HEURE)
-    write_text(f"{distance} km", x=X_RIGHT, y=Y_DISTANCE)
+    # Date, Heure, Distance (On écrit juste les chiffres, les symboles sont sur le template)
+    write_text(date, x=X_MARGIN_RIGHT, y=Y_DATE)
+    write_text(depart, x=X_DEPART, y=Y_HEURE, align='left')
+    write_text(arrivee, x=X_ARRIVEE, y=Y_HEURE, align='left')
+    write_text(f"{distance}", x=X_PRICE_RIGHT, y=Y_DISTANCE) 
     
-    # Prix
-    write_text(f"2.94 \u20AC", x=X_RIGHT, y=Y_CHARGE)
-    write_text(f"{prix_ttc:.2f} \u20AC", x=X_RIGHT, y=Y_TTC, fnt=font_ttc, fnt_euro=font_euro_ttc)
-    write_text(f"{tva:.2f} \u20AC", x=X_RIGHT, y=Y_TVA)
-    write_text(f"{ht:.2f} \u20AC", x=X_RIGHT, y=Y_HT)
+    # Prix (On aligne juste avant le symbole € du template)
+    write_text(f"2.94", x=X_PRICE_RIGHT, y=Y_CHARGE)
+    write_text(f"{prix_ttc:.2f}", x=X_PRICE_RIGHT, y=Y_TTC, fnt=font_ttc)
+    write_text(f"{tva:.2f}", x=X_PRICE_RIGHT, y=Y_TVA)
+    write_text(f"{ht:.2f}", x=X_PRICE_RIGHT, y=Y_HT)
 
     # 3. Sauvegarder en PDF
     buf = io.BytesIO()
