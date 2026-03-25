@@ -7,34 +7,35 @@ app = Flask(__name__)
 # ── Font setup ──────────────────────────────────────────
 FONT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'OCR-B.ttf')
 
-# ⚠️ NOUVELLES COORDONNÉES EXACTES (Pour séparer les chiffres) ⚠️
+# ⚠️ NOUVELLES COORDONNÉES AFFINÉES (D'après la dernière capture) ⚠️
 
 # --- LA DATE --- (Entre les slashes / / )
-X_DATE_J = 430   # Jour (23)
-X_DATE_M = 530   # Mois (02)
-X_DATE_A = 615   # Année (2026)
+X_DATE_J = 460   # Jour (23) - décalé à droite
+X_DATE_M = 510   # Mois (02) - décalé à gauche
+X_DATE_A = 595   # Année (2026) - décalé à gauche
 
 # --- LES HEURES --- (Autour des deux points : )
-X_DEP_H  = 230   # Départ Heure (12)
-X_DEP_M  = 310   # Départ Minute (54)
-X_ARR_H  = 565   # Arrivée Heure (13)
-X_ARR_M  = 645   # Arrivée Minute (52)
+X_DEP_H  = 265   # Départ Heure (12) - décalé à droite
+X_DEP_M  = 305   # Départ Min (54) - décalé à gauche
+X_ARR_H  = 535   # Arrivée Heure (13) - décalé à gauche
+X_ARR_M  = 610   # Arrivée Min (52) - décalé à gauche
 
 # --- LA DISTANCE --- (Juste avant le 'km')
-X_DIST   = 620   
+X_DIST   = 635   # décalé à droite pour coller au 'km'
 
 # --- LES PRIX --- (Alignés à droite avant le '€')
-X_PRICE  = 665   
+X_PRICE  = 645   # décalé à gauche pour ne pas toucher le €
 
-# --- POSITIONS Y --- (Hauteur)
-Y_DATE     = 390
-Y_HEURE    = 440
-Y_DISTANCE = 490
+# --- POSITIONS Y --- (Hauteur : on remonte tout !)
+Y_DATE     = 375
+Y_HEURE    = 410
+Y_DISTANCE = 450
 
-Y_CHARGE   = 785
-Y_TTC      = 875
-Y_TVA      = 950
-Y_HT       = 1000
+# J'ai aussi un peu remonté les prix au cas où
+Y_CHARGE   = 770
+Y_TTC      = 860
+Y_TVA      = 935
+Y_HT       = 985
 
 
 def build_ticket_image(jour, mois, annee, depart, arrivee, distance, prix_ttc):
@@ -72,12 +73,12 @@ def build_ticket_image(jour, mois, annee, depart, arrivee, distance, prix_ttc):
 
     # --- ÉCRITURE SÉPARÉE SUR L'IMAGE ---
     
-    # DATE: Jour / Mois / Année (Écrits de gauche à droite)
+    # DATE
     write_text(jour, x=X_DATE_J, y=Y_DATE, align='left')
     write_text(mois, x=X_DATE_M, y=Y_DATE, align='left')
     write_text(annee, x=X_DATE_A, y=Y_DATE, align='left')
     
-    # HEURES: On sépare HH:MM
+    # HEURES
     dep_h, dep_m = depart.split(':')
     arr_h, arr_m = arrivee.split(':')
     
