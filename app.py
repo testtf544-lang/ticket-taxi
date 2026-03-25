@@ -83,15 +83,41 @@ def build_ticket(date, depart, arrivee, distance, prix_ttc):
     def left(text, size=FS, x=None, y_pos=None):
         nonlocal y
         pos = y_pos if y_pos is not None else y
-        c.setFont('OCRB', size)
-        c.drawString(x if x is not None else MARGIN, pos, text)
+        x_start = x if x is not None else MARGIN
+        
+        # Intercept Euro symbol and use Helvetica
+        if '\u20AC' in text:
+            base_text = text.replace(' \u20AC', '')
+            c.setFont('OCRB', size)
+            c.drawString(x_start, pos, base_text)
+            tw = c.stringWidth(base_text, 'OCRB', size)
+            c.setFont('Helvetica', size)
+            c.drawString(x_start + tw, pos, ' \u20AC')
+        else:
+            c.setFont('OCRB', size)
+            c.drawString(x_start, pos, text)
 
     def right(text, size=FS, y_pos=None):
         nonlocal y
         pos = y_pos if y_pos is not None else y
-        c.setFont('OCRB', size)
-        tw = c.stringWidth(text, 'OCRB', size)
-        c.drawString(W - MARGIN - tw, pos, text)
+        
+        # Intercept Euro symbol and use Helvetica
+        if '\u20AC' in text:
+            base_text = text.replace(' \u20AC', '')
+            c.setFont('OCRB', size)
+            tw_base = c.stringWidth(base_text, 'OCRB', size)
+            c.setFont('Helvetica', size)
+            tw_euro = c.stringWidth(' \u20AC', 'Helvetica', size)
+            
+            x_start = W - MARGIN - tw_base - tw_euro
+            c.setFont('OCRB', size)
+            c.drawString(x_start, pos, base_text)
+            c.setFont('Helvetica', size)
+            c.drawString(x_start + tw_base, pos, ' \u20AC')
+        else:
+            c.setFont('OCRB', size)
+            tw = c.stringWidth(text, 'OCRB', size)
+            c.drawString(W - MARGIN - tw, pos, text)
 
     def row(label, value, size=FS):
         """Left label + right value on same line."""
@@ -147,24 +173,27 @@ def build_ticket(date, depart, arrivee, distance, prix_ttc):
     # ── ⑦ PRISE EN CHARGE ────────────────────────────────────
     row('Prise en charge', f'2.94 \u20AC');         nl(G_TINY + LH)
 
-    # ── ⑧ TOTAL TTC — larger, bold, split Euro ───────────────
+    # ── ⑧ TOTAL TTC — larger, bold, mixed font ───────────────
     c.setFont('OCRB', FS_TTL)
     label_ttc = 'TOTAL TTC'
     value_ttc = f'{prix_ttc:.2f}'
-    euro_sym = ' \u20AC'
     
     # bold effect by drawing twice
     c.drawString(MARGIN,       y, label_ttc)
     c.drawString(MARGIN + 0.4, y, label_ttc)
     
     tw_ttc = c.stringWidth(value_ttc, 'OCRB', FS_TTL)
-    tw_euro = c.stringWidth(euro_sym, 'OCRB', FS) # Euro is smaller
+    c.setFont('Helvetica', FS) # switch font just to get accurate euro width
+    tw_euro = c.stringWidth(' \u20AC', 'Helvetica', FS) 
     
-    c.drawString(W - MARGIN - tw_ttc - tw_euro,       y, value_ttc)
-    c.drawString(W - MARGIN - tw_ttc - tw_euro + 0.4, y, value_ttc)
+    x_val = W - MARGIN - tw_ttc - tw_euro
     
-    c.setFont('OCRB', FS)
-    c.drawString(W - MARGIN - tw_euro, y, euro_sym)
+    c.setFont('OCRB', FS_TTL)
+    c.drawString(x_val,       y, value_ttc)
+    c.drawString(x_val + 0.4, y, value_ttc)
+    
+    c.setFont('Helvetica', FS)
+    c.drawString(x_val + tw_ttc, y, ' \u20AC')
     nl(G_TINY + LH * 1.55)
 
     # ── ⑨ TVA / HT ───────────────────────────────────────────
@@ -254,50 +283,3 @@ HTML = '''<!DOCTYPE html>
         <input name="depart" type="time" value="12:54" required>
       </div>
       <div>
-        <label>Heure Arrivée</label>
-        <input name="arrivee" type="time" value="13:52" required>
-      </div>
-    </div>
-    <div class="full">
-      <label>Prix Total TTC (€)</label>
-      <input name="prix" type="number" step="0.01" value="135.24" required>
-    </div>
-    <button type="submit">⬇ Télécharger le Ticket PDF</button>
-  </form>
-  <p class="note">PDF généré directement en Python — rendu pixel-perfect.</p>
-</div>
-</body>
-</html>'''
-
-
-@app.route('/')
-def index():
-    return render_template_string(HTML)
-
-
-@app.route('/generate', methods=['POST'])
-def generate():
-    # Parse form
-    raw_date = request.form['date']          # "2026-02-23"
-    y, m, d  = raw_date.split('-')
-    date_str = f'{d}/{m}/{y}'
-
-    depart   = request.form['depart']
-    arrivee  = request.form['arrivee']
-    distance = request.form['distance']
-    prix_ttc = float(request.form['prix'])
-
-    buf = build_ticket(date_str, depart, arrivee, distance, prix_ttc)
-
-    filename = f'Ticket_{d}-{m}-{y}.pdf'
-    return send_file(
-        buf,
-        mimetype='application/pdf',
-        as_attachment=True,
-        download_name=filename
-    )
-
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
