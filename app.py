@@ -8,20 +8,24 @@ app = Flask(__name__)
 FONT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'OCR-B.ttf')
 
 # ⚠️ COORDONNÉES EXACTES POUR IMAGE 739 x 2000 px ⚠️
-X_MARGIN_RIGHT = 680   # Alignement général à droite (Date)
-X_PRICE_RIGHT  = 620   # Alignement des prix (juste avant le symbole € et km)
-X_DEPART       = 240   # Position Heure Départ (après "Départ:")
-X_ARRIVEE      = 540   # Position Heure Arrivée (après "Arrivée.")
+# X_MARGIN_RIGHT: khellitha kima hiya (Date jat hiya hadik)
+X_MARGIN_RIGHT = 680   
+# X_PRICE_RIGHT: k7eznaha l limen b 45px bash t9reb l € w km
+X_PRICE_RIGHT  = 665   
+# X_DEPART / X_ARRIVEE: k7eznahom l limen bash ykhrjo mn dik ":"
+X_DEPART       = 285   
+X_ARRIVEE      = 575   
 
-# Positions Y (Hauteur de haut en bas) calculées sur 2000px
-Y_DATE     = 390
-Y_HEURE    = 440
-Y_DISTANCE = 490
+# Positions Y (Hauteur de haut en bas)
+# Zedna +20 7ta l +30 points f kolshi bash lktaba thbet w tji fo9 ster
+Y_DATE     = 410
+Y_HEURE    = 460
+Y_DISTANCE = 510
 
-Y_CHARGE   = 780
-Y_TTC      = 865
-Y_TVA      = 940
-Y_HT       = 990
+Y_CHARGE   = 805
+Y_TTC      = 895
+Y_TVA      = 970
+Y_HT       = 1020
 
 def build_ticket_image(date, depart, arrivee, distance, prix_ttc):
     ht  = prix_ttc / 1.10
