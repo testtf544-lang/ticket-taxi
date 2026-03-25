@@ -1,131 +1,112 @@
 from flask import Flask, request, send_file, render_template_string
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import mm
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from pypdf import PdfReader, PdfWriter
+from PIL import Image, ImageDraw, ImageFont
 import io, os
 
 app = Flask(__name__)
 
-# ── Font registration ──────────────────────────────────────────
+# ── Font setup ──────────────────────────────────────────
 FONT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'OCR-B.ttf')
-try:
-    pdfmetrics.registerFont(TTFont('OCRB', FONT_PATH))
-except:
-    pass
 
-# ⚠️ LES NOUVELLES COORDONNÉES EXACTES (Calculées grâce à ta capture) ⚠️
-Y_DATE     = 625
-Y_HEURE    = 610
-Y_DISTANCE = 595
+# ⚠️ RÉGLAGES DES COORDONNÉES EN PIXELS ⚠️
+# Dans une image, Y=0 est tout en HAUT. Plus Y grandit, plus on descend.
+# X_RIGHT est la limite à droite pour aligner les prix.
+X_LEFT     = 200   
+X_RIGHT    = 800   
 
-Y_CHARGE   = 495
-Y_TTC      = 470
-Y_TVA      = 445
-Y_HT       = 430
+Y_DATE     = 550
+Y_HEURE    = 600
+Y_DISTANCE = 650
 
-def build_ticket_overlay(date, depart, arrivee, distance, prix_ttc):
+Y_CHARGE   = 950
+Y_TTC      = 1000
+Y_TVA      = 1050
+Y_HT       = 1100
+
+def build_ticket_image(date, depart, arrivee, distance, prix_ttc):
     ht  = prix_ttc / 1.10
     tva = prix_ttc - ht
 
-    original_path = os.path.join(os.path.dirname(__file__), 'original.pdf')
-    reader = PdfReader(original_path)
-    page = reader.pages[0]
-    
-    page_w = float(page.mediabox.width)
-    page_h = float(page.mediabox.height)
+    # 1. Ouvrir l'image originale vide
+    img_path = os.path.join(os.path.dirname(__file__), 'template.png')
+    img = Image.open(img_path).convert("RGB")
+    draw = ImageDraw.Draw(img)
 
-    packet = io.BytesIO()
-    c = canvas.Canvas(packet, pagesize=(page_w, page_h))
+    # 2. Tailles de police (Ajuster selon la taille de l'image)
+    SIZE_NORMAL = 28
+    SIZE_TTC    = 38
 
-    def hide_and_write(text, x, y, width, height=12, font='OCRB', size=6.5, align='right'):
-        """Dessine un rectangle gris très clair (pour cacher) puis le texte thermique"""
-        c.saveState()
-        
-        # 1. Rectangle pour cacher les anciens chiffres (plus large pour être sûr)
-        c.setFillColorRGB(0.98, 0.98, 0.98) 
-        c.rect(x, y - 2, width, height, fill=1, stroke=0)
-        
-        # 2. Couleur Gris Thermique
-        c.setFillColorRGB(0.22, 0.22, 0.22) 
-        
+    try:
+        font = ImageFont.truetype(FONT_PATH, SIZE_NORMAL)
+        font_ttc = ImageFont.truetype(FONT_PATH, SIZE_TTC)
+    except:
+        font = ImageFont.load_default()
+        font_ttc = font
+
+    # Police pour l'Euro
+    try:
+        font_euro = ImageFont.truetype("DejaVuSans.ttf", SIZE_NORMAL)
+        font_euro_ttc = ImageFont.truetype("DejaVuSans.ttf", SIZE_TTC)
+    except:
+        font_euro = font
+        font_euro_ttc = font_ttc
+
+    # Couleur "Encre thermique" (Gris foncé, pas noir pur)
+    COLOR_INK = (50, 50, 50)
+
+    def write_text(text, x, y, fnt=font, fnt_euro=font_euro, align='right'):
         has_euro = '\u20AC' in text
         base_text = text.replace(' \u20AC', '')
+
+        # Calculer la largeur
+        bbox = draw.textbbox((0, 0), base_text, font=fnt)
+        tw_base = bbox[2] - bbox[0]
         
-        c.setFont(font, size)
-        tw_base = c.stringWidth(base_text, font, size)
         tw_euro = 0
-        
         if has_euro:
-            c.setFont('Helvetica', size)
-            tw_euro = c.stringWidth(' \u20AC', 'Helvetica', size)
-            
+            bbox_euro = draw.textbbox((0, 0), ' \u20AC', font=fnt_euro)
+            tw_euro = bbox_euro[2] - bbox_euro[0]
+
         total_w = tw_base + tw_euro
         
         start_x = x
         if align == 'right':
-            # On colle tout bien à droite du rectangle blanc
-            start_x = x + width - total_w
-            
-        # Effet gras thermique (double tracé avec micro décalage)
-        c.setFont(font, size)
-        c.drawString(start_x, y, base_text)
-        c.drawString(start_x + 0.15, y, base_text) 
-        
+            start_x = x - total_w # Aligner à droite par rapport à X
+
+        # Dessiner le texte de base
+        draw.text((start_x, y), base_text, font=fnt, fill=COLOR_INK)
+        draw.text((start_x + 1, y), base_text, font=fnt, fill=COLOR_INK) # Effet gras
+
+        # Dessiner l'Euro
         if has_euro:
-            c.setFont('Helvetica', size)
-            c.drawString(start_x + tw_base, y, ' \u20AC')
-            c.drawString(start_x + tw_base + 0.15, y, ' \u20AC')
-            
-        c.restoreState()
+            draw.text((start_x + tw_base, y), ' \u20AC', font=fnt_euro, fill=COLOR_INK)
+            draw.text((start_x + tw_base + 1, y), ' \u20AC', font=fnt_euro, fill=COLOR_INK)
 
-    # --- CACHER ET REMPLACER ---
+    # --- ÉCRITURE SUR L'IMAGE ---
     
-    # Bloc du Haut (Date, Heure, Distance) - x reculé à 70 et width augmenté à 85 pour couvrir largement
-    hide_and_write(date, x=70, y=Y_DATE, width=85)
+    # Date, Heure, Distance
+    write_text(date, x=X_RIGHT, y=Y_DATE)
+    write_text(depart, x=X_LEFT, y=Y_HEURE, align='left')
+    write_text(arrivee, x=X_RIGHT, y=Y_HEURE)
+    write_text(f"{distance} km", x=X_RIGHT, y=Y_DISTANCE)
     
-    hide_and_write(depart, x=45, y=Y_HEURE, width=30, align='left')
-    hide_and_write(arrivee, x=115, y=Y_HEURE, width=40, align='right')
-    
-    hide_and_write(f"{distance} km", x=70, y=Y_DISTANCE, width=85)
-    
-    # Bloc du Bas (Prix)
-    hide_and_write(f"2.94 \u20AC", x=90, y=Y_CHARGE, width=65)
-    
-    # TOTAL TTC (Font plus grand)
-    c.setFont('OCRB', 11)
-    hide_and_write(f"{prix_ttc:.2f} \u20AC", x=70, y=Y_TTC, width=85, size=11)
-    # Effet Extra-Gras pour le TTC
-    hide_and_write(f"{prix_ttc:.2f} \u20AC", x=70.4, y=Y_TTC, width=0, size=11, align='left') 
-    
-    # TVA & HT
-    hide_and_write(f"{tva:.2f} \u20AC", x=90, y=Y_TVA, width=65)
-    hide_and_write(f"{ht:.2f} \u20AC", x=90, y=Y_HT, width=65)
+    # Prix
+    write_text(f"2.94 \u20AC", x=X_RIGHT, y=Y_CHARGE)
+    write_text(f"{prix_ttc:.2f} \u20AC", x=X_RIGHT, y=Y_TTC, fnt=font_ttc, fnt_euro=font_euro_ttc)
+    write_text(f"{tva:.2f} \u20AC", x=X_RIGHT, y=Y_TVA)
+    write_text(f"{ht:.2f} \u20AC", x=X_RIGHT, y=Y_HT)
 
-    c.save()
-    packet.seek(0)
-
-    # Fusion des calques
-    new_pdf = PdfReader(packet)
-    overlay_page = new_pdf.pages[0]
-    page.merge_page(overlay_page)
-    
-    output = PdfWriter()
-    output.add_page(page)
-    
+    # 3. Sauvegarder en PDF
     buf = io.BytesIO()
-    output.write(buf)
+    img.save(buf, format="PDF", resolution=100.0)
     buf.seek(0)
     return buf
-
 
 HTML = '''<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ticket Taxi — Overlay Mod</title>
+<title>Ticket Taxi — Pillow Mod</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{background:#e5e7eb;font-family:system-ui,sans-serif;display:flex;
@@ -145,7 +126,7 @@ HTML = '''<!DOCTYPE html>
 </head>
 <body>
 <div class="card">
-  <h1>🧾 Ticket Taxi (Overlay)</h1>
+  <h1>🧾 Ticket Taxi (Pillow)</h1>
   <form method="POST" action="/generate">
     <div class="grid">
       <div><label>Date</label><input name="date" type="date" value="2026-02-23" required></div>
@@ -158,7 +139,7 @@ HTML = '''<!DOCTYPE html>
     <div class="full">
       <label>Prix Total TTC (€)</label><input name="prix" type="number" step="0.01" value="135.24" required>
     </div>
-    <button type="submit">⬇ Télécharger</button>
+    <button type="submit">⬇ Télécharger PDF</button>
   </form>
 </div>
 </body>
@@ -174,7 +155,7 @@ def generate():
     y, m, d  = raw_date.split('-')
     date_str = f'{d}/{m}/{y}'
 
-    buf = build_ticket_overlay(
+    buf = build_ticket_image(
         date_str, 
         request.form['depart'], 
         request.form['arrivee'], 
