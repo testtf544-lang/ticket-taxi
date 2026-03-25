@@ -3,233 +3,89 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from pypdf import PdfReader, PdfWriter
 import io, os
 
 app = Flask(__name__)
 
 # ── Font registration ──────────────────────────────────────────
 FONT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'OCR-B.ttf')
-pdfmetrics.registerFont(TTFont('OCRB', FONT_PATH))
+try:
+    pdfmetrics.registerFont(TTFont('OCRB', FONT_PATH))
+except:
+    pass
 
-# ── Ticket dimensions (58mm paper) ────────────────────────────
-W       = 58 * mm          # page width
-MARGIN  = 3 * mm           # left/right margin
-TW      = W - 2 * MARGIN   # text width = 52mm
+# ⚠️ LES COORDONNÉES À AJUSTER (En points, depuis le BAS de la page) ⚠️
+# Zid wla n9ess f had l'ar9am 7ta yti7 lk lktaba jdida fo9 l9dima las9a
+Y_DATE     = 285
+Y_HEURE    = 270
+Y_DISTANCE = 255
+Y_CHARGE   = 195
+Y_TTC      = 180
+Y_TVA      = 165
+Y_HT       = 150
 
-# ── Sizes ──────────────────────────────────────────────────────
-FS      = 6.5              # body font size (pt)
-FS_TTL  = 11               # TOTAL TTC font size (pt)
-LH      = FS * 1.35        # line height (pt)
-
-# ── Gaps between sections (pt) ────────────────────────────────
-G_BIG   = 5.5   # major section gap
-G_MED   = 3.5   # medium gap
-G_SML   = 1.5   # small gap (before/after dots)
-G_TINY  = 1.0   # tiny gap
-
-
-def build_ticket(date, depart, arrivee, distance, prix_ttc):
-    """Generate the ticket PDF, return bytes."""
+def build_ticket_overlay(date, depart, arrivee, distance, prix_ttc):
     ht  = prix_ttc / 1.10
     tva = prix_ttc - ht
 
-    # ── Pre-calculate total height ─────────────────────────────
-    PAGE_H = (
-        MARGIN              # top
-        + LH * 1.5          # TAXI (2 lines, tighter)
-        + G_BIG
-        + LH * 4            # stat/immat/commune/mantes
-        + G_BIG
-        + LH * 4            # date/depart/distance/lieu depart
-        + G_SML + LH        # dots
-        + G_SML + LH        # lieu arrivée
-        + G_SML + LH        # dots
-        + G_MED + LH        # prise en charge
-        + G_TINY + LH*1.6   # TOTAL TTC (taller)
-        + LH * 2            # TVA / HT
-        + G_BIG
-        + LH * 4            # tarif minimum
-        + G_BIG
-        + LH * 6            # adresse
-        + G_BIG
-        + LH                # nom client
-        + G_MED + LH        # dots
-        + LH                # adresse client
-        + G_SML + LH        # dots
-        + LH                # signature client
-        + LH * 2            # signature space
-        + G_BIG
-        + LH                # exemplaire chauffeur
-        + MARGIN            # bottom
-    )
+    # 1. Lire le PDF original
+    original_path = os.path.join(os.path.dirname(__file__), 'original.pdf')
+    reader = PdfReader(original_path)
+    page = reader.pages[0]
+    
+    page_w = float(page.mediabox.width)
+    page_h = float(page.mediabox.height)
 
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=(W, PAGE_H))
-    c.setAuthor('Taxi Elidrissi Hicham')
+    # 2. Créer le calque (overlay) avec ReportLab
+    packet = io.BytesIO()
+    c = canvas.Canvas(packet, pagesize=(page_w, page_h))
 
-    # cursor starts from TOP, we subtract as we go down
-    y = PAGE_H - MARGIN
-
-    def font(size=FS, bold=False):
-        c.setFont('OCRB', size)
-
-    def center(text, size=FS, y_pos=None):
-        nonlocal y
-        pos = y_pos if y_pos is not None else y
-        c.setFont('OCRB', size)
-        tw = c.stringWidth(text, 'OCRB', size)
-        c.drawString((W - tw) / 2, pos, text)
-
-    def left(text, size=FS, x=None, y_pos=None):
-        nonlocal y
-        pos = y_pos if y_pos is not None else y
-        x_start = x if x is not None else MARGIN
+    def hide_and_write(text, x, y, width, height=12, font='OCRB', size=6.5):
+        """Dessine un rectangle blanc puis écrit le texte"""
+        c.saveState()
+        # Rectangle blanc pour cacher l'ancien texte
+        c.setFillColorRGB(1, 1, 1) 
+        c.rect(x, y - 2, width, height, fill=1, stroke=0)
         
-        # Intercept Euro symbol and use Helvetica
-        if '\u20AC' in text:
-            base_text = text.replace(' \u20AC', '')
-            c.setFont('OCRB', size)
-            c.drawString(x_start, pos, base_text)
-            tw = c.stringWidth(base_text, 'OCRB', size)
-            c.setFont('Helvetica', size)
-            c.drawString(x_start + tw, pos, ' \u20AC')
-        else:
-            c.setFont('OCRB', size)
-            c.drawString(x_start, pos, text)
+        # Nouveau texte en noir
+        c.setFillColorRGB(0, 0, 0) 
+        c.setFont(font, size)
+        c.drawString(x, y, text)
+        c.restoreState()
 
-    def right(text, size=FS, y_pos=None):
-        nonlocal y
-        pos = y_pos if y_pos is not None else y
-        
-        # Intercept Euro symbol and use Helvetica
-        if '\u20AC' in text:
-            base_text = text.replace(' \u20AC', '')
-            c.setFont('OCRB', size)
-            tw_base = c.stringWidth(base_text, 'OCRB', size)
-            c.setFont('Helvetica', size)
-            tw_euro = c.stringWidth(' \u20AC', 'Helvetica', size)
-            
-            x_start = W - MARGIN - tw_base - tw_euro
-            c.setFont('OCRB', size)
-            c.drawString(x_start, pos, base_text)
-            c.setFont('Helvetica', size)
-            c.drawString(x_start + tw_base, pos, ' \u20AC')
-        else:
-            c.setFont('OCRB', size)
-            tw = c.stringWidth(text, 'OCRB', size)
-            c.drawString(W - MARGIN - tw, pos, text)
-
-    def row(label, value, size=FS):
-        """Left label + right value on same line."""
-        left(label, size)
-        right(value, size)
-
-    def dots():
-        """Draw a full-width dots line."""
-        c.setFont('OCRB', FS)
-        dot_w = c.stringWidth('. ', 'OCRB', FS)
-        x = MARGIN
-        while x + dot_w < W - MARGIN:
-            c.drawString(x, y, '.')
-            x += dot_w
-
-    def nl(gap=LH):
-        nonlocal y
-        y -= gap
-
-    # ── ① HEADER ──────────────────────────────────────────────
-    center('TAXI');                 nl()
-    center('ELIDRISSI HICHAM');     nl(G_BIG + LH)
-
-    # ── ② STATION INFO ────────────────────────────────────────
-    row('N\u00B0 Stat.:',  '1');           nl(LH)
-    row('N\u00B0 Immat.:', 'FK-309-AA');   nl(LH)
-    left('Commune de rattachement:');       nl(LH)
-
-    c.setFont('OCRB', FS)
-    text_mantes = 'MANTES LA JOLIE'
-    tw = c.stringWidth(text_mantes, 'OCRB', FS)
-    xm = (W - tw) / 2
-    c.drawString(xm,       y, text_mantes)
-    c.drawString(xm + 0.3, y, text_mantes)  # bold effect
-    nl(G_BIG + LH)
-
-    # ── ③ DATE BLOCK ──────────────────────────────────────────
-    row('Date:', date);                             nl(LH)
-    left(f'D\u00e9part:{depart}');
-    right(f'Arriv\u00e9e:{arrivee}');               nl(LH)
-    row('Distance:', f'{distance} km');             nl(LH)
-    left('Lieu d\u00e9part:');                      nl(G_SML + LH)
-
-    # ── ④ DOTS DÉPART ─────────────────────────────────────────
-    dots();                                         nl(G_SML + LH)
-
-    # ── ⑤ LIEU ARRIVÉE ────────────────────────────────────────
-    left('Lieu arriv\u00e9e:');                     nl(G_SML + LH)
-
-    # ── ⑥ DOTS ARRIVÉE ────────────────────────────────────────
-    dots();                                         nl(G_MED + LH)
-
-    # ── ⑦ PRISE EN CHARGE ────────────────────────────────────
-    row('Prise en charge', f'2.94 \u20AC');         nl(G_TINY + LH)
-
-    # ── ⑧ TOTAL TTC — larger, bold, mixed font ───────────────
-    c.setFont('OCRB', FS_TTL)
-    label_ttc = 'TOTAL TTC'
-    value_ttc = f'{prix_ttc:.2f}'
+    # --- CACHER ET REMPLACER (x = distance depuis la gauche) ---
+    # On cache la partie droite (à partir de x=80 points)
     
-    # bold effect by drawing twice
-    c.drawString(MARGIN,       y, label_ttc)
-    c.drawString(MARGIN + 0.4, y, label_ttc)
+    hide_and_write(date, x=100, y=Y_DATE, width=60)
     
-    tw_ttc = c.stringWidth(value_ttc, 'OCRB', FS_TTL)
-    c.setFont('Helvetica', FS) # switch font just to get accurate euro width
-    tw_euro = c.stringWidth(' \u20AC', 'Helvetica', FS) 
+    # Heure: on cache "12:54 Arrivée:13:52"
+    hide_and_write(f"{depart}  Arrivée:{arrivee}", x=50, y=Y_HEURE, width=110)
     
-    x_val = W - MARGIN - tw_ttc - tw_euro
+    hide_and_write(f"{distance} km", x=100, y=Y_DISTANCE, width=60)
     
-    c.setFont('OCRB', FS_TTL)
-    c.drawString(x_val,       y, value_ttc)
-    c.drawString(x_val + 0.4, y, value_ttc)
+    hide_and_write(f"2.94 \u20AC", x=110, y=Y_CHARGE, width=50)
     
-    c.setFont('Helvetica', FS)
-    c.drawString(x_val + tw_ttc, y, ' \u20AC')
-    nl(G_TINY + LH * 1.55)
+    # TOTAL TTC (Plus grand)
+    hide_and_write(f"{prix_ttc:.2f} \u20AC", x=90, y=Y_TTC, width=70, size=11)
+    
+    hide_and_write(f"{tva:.2f} \u20AC", x=100, y=Y_TVA, width=60)
+    hide_and_write(f"{ht:.2f} \u20AC", x=100, y=Y_HT, width=60)
 
-    # ── ⑨ TVA / HT ───────────────────────────────────────────
-    row('Total TVA 10.00%', f'{tva:.2f} \u20AC');  nl(LH)
-    row('Total HT',          f'{ht:.2f} \u20AC');  nl(G_BIG + LH)
-
-    # ── ⑩ TARIF MINIMUM ──────────────────────────────────────
-    left('Le tarif minimum, suppl.');               nl(LH)
-    left("inclus, susceptible d'\u00eatre");        nl(LH)
-    left('per\u00e7u pour une course est');         nl(LH)
-    left('fix\u00e9 \u00e0  8.00 \u20AC');          nl(G_BIG + LH)
-
-    # ── ⑪ ADRESSE ────────────────────────────────────────────
-    left('Adresse de r\u00e9clamation:');           nl(LH)
-    left('  Prefecture des Yvelines');              nl(LH)
-    left(' Bureau de la reglementation');           nl(LH)
-    left('    General true jean');                  nl(LH)
-    left('  Houdon 78010 Versailles');              nl(LH)
-    left('       Cedex');                           nl(G_BIG + LH)
-
-    # ── ⑫ NOM CLIENT ─────────────────────────────────────────
-    left('Nom client:');                            nl(G_MED + LH)
-    left('....');                                   nl(LH)
-
-    # ── ⑬ ADRESSE CLIENT ─────────────────────────────────────
-    left('Adresse client:');                        nl(G_SML + LH)
-    left('.....');                                  nl(LH)
-
-    # ── ⑭ SIGNATURE ──────────────────────────────────────────
-    left('Signature client:');                      nl(LH * 2.5)
-
-    # ── ⑮ FOOTER ─────────────────────────────────────────────
-    center('Exemplaire chauffeur')
-
-    c.showPage()
     c.save()
+    packet.seek(0)
+
+    # 3. Fusionner (Merge)
+    new_pdf = PdfReader(packet)
+    overlay_page = new_pdf.pages[0]
+    
+    page.merge_page(overlay_page) # Lessa9 jdid fo9 l9dim
+    
+    output = PdfWriter()
+    output.add_page(page)
+    
+    buf = io.BytesIO()
+    output.write(buf)
     buf.seek(0)
     return buf
 
@@ -239,7 +95,7 @@ HTML = '''<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ticket Taxi — Elidrissi Hicham</title>
+<title>Ticket Taxi — Overlay Mod</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{background:#e5e7eb;font-family:system-ui,sans-serif;display:flex;
@@ -251,35 +107,53 @@ HTML = '''<!DOCTYPE html>
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
   label{font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:5px;}
   input{border:1.5px solid #d1d5db;padding:9px 11px;width:100%;
-        border-radius:8px;font-size:14px;transition:border-color .2s;}
-  input:focus{border-color:#6366f1;outline:none;box-shadow:0 0 0 3px rgba(99,102,241,.15);}
+        border-radius:8px;font-size:14px;}
   .full{margin-bottom:20px;}
   button{background:#4f46e5;color:white;font-weight:700;width:100%;
-         padding:14px;border:none;border-radius:10px;cursor:pointer;font-size:15px;
-         letter-spacing:.3px;transition:background .2s;}
-  button:hover{background:#4338ca;}
-  .note{margin-top:12px;font-size:11px;color:#9ca3af;text-align:center;}
+         padding:14px;border:none;border-radius:10px;cursor:pointer;font-size:15px;}
 </style>
 </head>
 <body>
 <div class="card">
-  <h1>🧾 Ticket Taxi (58mm)</h1>
-  <p>Remplissez les informations de la course et téléchargez le reçu PDF.</p>
-
+  <h1>🧾 Ticket Taxi (Overlay)</h1>
   <form method="POST" action="/generate">
     <div class="grid">
-      <div>
-        <label>Date</label>
-        <input name="date" type="date" value="2026-02-23" required>
-      </div>
-      <div>
-        <label>Distance (km)</label>
-        <input name="distance" type="number" step="0.1" value="64.8" required>
-      </div>
+      <div><label>Date</label><input name="date" type="date" value="2026-02-23" required></div>
+      <div><label>Distance</label><input name="distance" type="number" step="0.1" value="64.8" required></div>
     </div>
     <div class="grid">
-      <div>
-        <label>Heure Départ</label>
-        <input name="depart" type="time" value="12:54" required>
-      </div>
-      <div>
+      <div><label>Départ</label><input name="depart" type="time" value="12:54" required></div>
+      <div><label>Arrivée</label><input name="arrivee" type="time" value="13:52" required></div>
+    </div>
+    <div class="full">
+      <label>Prix Total TTC (€)</label><input name="prix" type="number" step="0.01" value="135.24" required>
+    </div>
+    <button type="submit">⬇ Télécharger</button>
+  </form>
+</div>
+</body>
+</html>'''
+
+@app.route('/')
+def index():
+    return render_template_string(HTML)
+
+@app.route('/generate', methods=['POST'])
+def generate():
+    raw_date = request.form['date']
+    y, m, d  = raw_date.split('-')
+    date_str = f'{d}/{m}/{y}'
+
+    buf = build_ticket_overlay(
+        date_str, 
+        request.form['depart'], 
+        request.form['arrivee'], 
+        request.form['distance'], 
+        float(request.form['prix'])
+    )
+
+    return send_file(buf, mimetype='application/pdf', as_attachment=True, download_name=f'Ticket_{d}-{m}-{y}.pdf')
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
