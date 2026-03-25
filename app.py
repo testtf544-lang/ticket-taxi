@@ -7,27 +7,37 @@ app = Flask(__name__)
 # ── Font setup ──────────────────────────────────────────
 FONT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'OCR-B.ttf')
 
-# ⚠️ COORDONNÉES EXACTES POUR IMAGE 739 x 2000 px ⚠️
-# X_MARGIN_RIGHT: khellitha kima hiya (Date jat hiya hadik)
-X_MARGIN_RIGHT = 680   
-# X_PRICE_RIGHT: k7eznaha l limen b 45px bash t9reb l € w km
-X_PRICE_RIGHT  = 665   
-# X_DEPART / X_ARRIVEE: k7eznahom l limen bash ykhrjo mn dik ":"
-X_DEPART       = 285   
-X_ARRIVEE      = 575   
+# ⚠️ NOUVELLES COORDONNÉES EXACTES (Pour séparer les chiffres) ⚠️
 
-# Positions Y (Hauteur de haut en bas)
-# Zedna +20 7ta l +30 points f kolshi bash lktaba thbet w tji fo9 ster
-Y_DATE     = 410
-Y_HEURE    = 460
-Y_DISTANCE = 510
+# --- LA DATE --- (Entre les slashes / / )
+X_DATE_J = 440   # Jour (23)
+X_DATE_M = 530   # Mois (02)
+X_DATE_A = 615   # Année (2026)
 
-Y_CHARGE   = 805
-Y_TTC      = 895
-Y_TVA      = 970
-Y_HT       = 1020
+# --- LES HEURES --- (Autour des deux points : )
+X_DEP_H  = 230   # Départ Heure (12)
+X_DEP_M  = 310   # Départ Minute (54)
+X_ARR_H  = 565   # Arrivée Heure (13)
+X_ARR_M  = 645   # Arrivée Minute (52)
 
-def build_ticket_image(date, depart, arrivee, distance, prix_ttc):
+# --- LA DISTANCE --- (Juste avant le 'km')
+X_DIST   = 620   
+
+# --- LES PRIX --- (Alignés à droite avant le '€')
+X_PRICE  = 665   
+
+# --- POSITIONS Y --- (Hauteur)
+Y_DATE     = 390
+Y_HEURE    = 440
+Y_DISTANCE = 490
+
+Y_CHARGE   = 785
+Y_TTC      = 875
+Y_TVA      = 950
+Y_HT       = 1000
+
+
+def build_ticket_image(jour, mois, annee, depart, arrivee, distance, prix_ttc):
     ht  = prix_ttc / 1.10
     tva = prix_ttc - ht
 
@@ -36,7 +46,7 @@ def build_ticket_image(date, depart, arrivee, distance, prix_ttc):
     img = Image.open(img_path).convert("RGB")
     draw = ImageDraw.Draw(img)
 
-    # 2. Tailles de police (Ajustées pour 2000px de hauteur)
+    # 2. Tailles de police
     SIZE_NORMAL = 34
     SIZE_TTC    = 52
 
@@ -47,35 +57,43 @@ def build_ticket_image(date, depart, arrivee, distance, prix_ttc):
         font = ImageFont.load_default()
         font_ttc = font
 
-    # Couleur "Encre thermique" (Gris très foncé, naturel)
     COLOR_INK = (40, 40, 40)
 
     def write_text(text, x, y, fnt=font, align='right'):
-        """Écrit le texte sans s'occuper de l'Euro, car il est sur l'image"""
         bbox = draw.textbbox((0, 0), text, font=fnt)
         tw = bbox[2] - bbox[0]
         
         start_x = x
         if align == 'right':
-            start_x = x - tw # Aligner à droite par rapport à X
+            start_x = x - tw 
 
-        # Dessiner le texte de base avec un léger effet d'encre (double tracé)
         draw.text((start_x, y), text, font=fnt, fill=COLOR_INK)
         draw.text((start_x + 1, y), text, font=fnt, fill=COLOR_INK)
 
-    # --- ÉCRITURE SUR L'IMAGE ---
+    # --- ÉCRITURE SÉPARÉE SUR L'IMAGE ---
     
-    # Date, Heure, Distance (On écrit juste les chiffres, les symboles sont sur le template)
-    write_text(date, x=X_MARGIN_RIGHT, y=Y_DATE)
-    write_text(depart, x=X_DEPART, y=Y_HEURE, align='left')
-    write_text(arrivee, x=X_ARRIVEE, y=Y_HEURE, align='left')
-    write_text(f"{distance}", x=X_PRICE_RIGHT, y=Y_DISTANCE) 
+    # DATE: Jour / Mois / Année (Écrits de gauche à droite)
+    write_text(jour, x=X_DATE_J, y=Y_DATE, align='left')
+    write_text(mois, x=X_DATE_M, y=Y_DATE, align='left')
+    write_text(annee, x=X_DATE_A, y=Y_DATE, align='left')
     
-    # Prix (On aligne juste avant le symbole € du template)
-    write_text(f"2.94", x=X_PRICE_RIGHT, y=Y_CHARGE)
-    write_text(f"{prix_ttc:.2f}", x=X_PRICE_RIGHT, y=Y_TTC, fnt=font_ttc)
-    write_text(f"{tva:.2f}", x=X_PRICE_RIGHT, y=Y_TVA)
-    write_text(f"{ht:.2f}", x=X_PRICE_RIGHT, y=Y_HT)
+    # HEURES: On sépare HH:MM
+    dep_h, dep_m = depart.split(':')
+    arr_h, arr_m = arrivee.split(':')
+    
+    write_text(dep_h, x=X_DEP_H, y=Y_HEURE, align='left')
+    write_text(dep_m, x=X_DEP_M, y=Y_HEURE, align='left')
+    write_text(arr_h, x=X_ARR_H, y=Y_HEURE, align='left')
+    write_text(arr_m, x=X_ARR_M, y=Y_HEURE, align='left')
+    
+    # DISTANCE
+    write_text(f"{distance}", x=X_DIST, y=Y_DISTANCE, align='right') 
+    
+    # PRIX
+    write_text(f"2.94", x=X_PRICE, y=Y_CHARGE, align='right')
+    write_text(f"{prix_ttc:.2f}", x=X_PRICE, y=Y_TTC, fnt=font_ttc, align='right')
+    write_text(f"{tva:.2f}", x=X_PRICE, y=Y_TVA, align='right')
+    write_text(f"{ht:.2f}", x=X_PRICE, y=Y_HT, align='right')
 
     # 3. Sauvegarder en PDF
     buf = io.BytesIO()
@@ -135,10 +153,9 @@ def index():
 def generate():
     raw_date = request.form['date']
     y, m, d  = raw_date.split('-')
-    date_str = f'{d}/{m}/{y}'
 
     buf = build_ticket_image(
-        date_str, 
+        d, m, y, 
         request.form['depart'], 
         request.form['arrivee'], 
         request.form['distance'], 
