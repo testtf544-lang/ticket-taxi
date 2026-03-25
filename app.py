@@ -34,7 +34,6 @@ def build_ticket(date, depart, arrivee, distance, prix_ttc):
     tva = prix_ttc - ht
 
     # ── Pre-calculate total height ─────────────────────────────
-    # Count lines + gaps to set exact page height
     PAGE_H = (
         MARGIN              # top
         + LH * 1.5          # TAXI (2 lines, tighter)
@@ -102,7 +101,6 @@ def build_ticket(date, depart, arrivee, distance, prix_ttc):
     def dots():
         """Draw a full-width dots line."""
         c.setFont('OCRB', FS)
-        # fill width with dots spaced ~2.2pt apart
         dot_w = c.stringWidth('. ', 'OCRB', FS)
         x = MARGIN
         while x + dot_w < W - MARGIN:
@@ -123,7 +121,6 @@ def build_ticket(date, depart, arrivee, distance, prix_ttc):
     left('Commune de rattachement:');       nl(LH)
 
     c.setFont('OCRB', FS)
-    # MANTES LA JOLIE — bold simulation: draw twice offset by 0.2pt
     text_mantes = 'MANTES LA JOLIE'
     tw = c.stringWidth(text_mantes, 'OCRB', FS)
     xm = (W - tw) / 2
@@ -150,16 +147,24 @@ def build_ticket(date, depart, arrivee, distance, prix_ttc):
     # ── ⑦ PRISE EN CHARGE ────────────────────────────────────
     row('Prise en charge', f'2.94 \u20AC');         nl(G_TINY + LH)
 
-    # ── ⑧ TOTAL TTC — larger, bold ───────────────────────────
+    # ── ⑧ TOTAL TTC — larger, bold, split Euro ───────────────
     c.setFont('OCRB', FS_TTL)
     label_ttc = 'TOTAL TTC'
-    value_ttc = f'{prix_ttc:.2f} \u20AC'
+    value_ttc = f'{prix_ttc:.2f}'
+    euro_sym = ' \u20AC'
+    
     # bold effect by drawing twice
     c.drawString(MARGIN,       y, label_ttc)
     c.drawString(MARGIN + 0.4, y, label_ttc)
+    
     tw_ttc = c.stringWidth(value_ttc, 'OCRB', FS_TTL)
-    c.drawString(W - MARGIN - tw_ttc,       y, value_ttc)
-    c.drawString(W - MARGIN - tw_ttc + 0.4, y, value_ttc)
+    tw_euro = c.stringWidth(euro_sym, 'OCRB', FS) # Euro is smaller
+    
+    c.drawString(W - MARGIN - tw_ttc - tw_euro,       y, value_ttc)
+    c.drawString(W - MARGIN - tw_ttc - tw_euro + 0.4, y, value_ttc)
+    
+    c.setFont('OCRB', FS)
+    c.drawString(W - MARGIN - tw_euro, y, euro_sym)
     nl(G_TINY + LH * 1.55)
 
     # ── ⑨ TVA / HT ───────────────────────────────────────────
@@ -175,18 +180,18 @@ def build_ticket(date, depart, arrivee, distance, prix_ttc):
     # ── ⑪ ADRESSE ────────────────────────────────────────────
     left('Adresse de r\u00e9clamation:');           nl(LH)
     left('  Prefecture des Yvelines');              nl(LH)
-    left('Bureau de la reglementation');            nl(LH)
-    left('    General 1rue jean');                  nl(LH)
+    left(' Bureau de la reglementation');           nl(LH)
+    left('    General true jean');                  nl(LH)
     left('  Houdon 78010 Versailles');              nl(LH)
     left('       Cedex');                           nl(G_BIG + LH)
 
     # ── ⑫ NOM CLIENT ─────────────────────────────────────────
     left('Nom client:');                            nl(G_MED + LH)
-    dots();                                         nl(LH)
+    left('....');                                   nl(LH)
 
     # ── ⑬ ADRESSE CLIENT ─────────────────────────────────────
     left('Adresse client:');                        nl(G_SML + LH)
-    dots();                                         nl(LH)
+    left('.....');                                  nl(LH)
 
     # ── ⑭ SIGNATURE ──────────────────────────────────────────
     left('Signature client:');                      nl(LH * 2.5)
