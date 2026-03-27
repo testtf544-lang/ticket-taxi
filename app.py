@@ -7,30 +7,30 @@ app = Flask(__name__)
 # ── Font setup ──────────────────────────────────────────
 FONT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'OCR-B.ttf')
 
-# ⚠️ ZONES DE MASQUAGE ET D'ÉCRITURE (Pour template.png 739x2000) ⚠️
+# ⚠️ ZONES DE MASQUAGE ET D'ÉCRITURE AJUSTÉES (Tout est remonté pour s'adapter au JPG) ⚠️
 # Format: (X_debut, Y_debut, Largeur, Hauteur)
-BOX_DATE     = (420, 390, 260, 45)  # Cache l'ancienne date
-BOX_DEP      = (230, 440, 110, 45)  # Cache l'ancienne heure de départ
-BOX_ARR      = (530, 440, 110, 45)  # Cache l'ancienne heure d'arrivée
-BOX_DIST     = (500, 490, 140, 45)  # Cache l'ancienne distance
+BOX_DATE     = (420, 335, 260, 45)  # Remonté de 55px
+BOX_DEP      = (225, 385, 110, 45)  # Remonté de 55px
+BOX_ARR      = (520, 385, 110, 45)  
+BOX_DIST     = (500, 435, 140, 45)  
 
-BOX_CHARGE   = (500, 785, 160, 45)  # Cache le prix de prise en charge
-BOX_TTC      = (450, 860, 210, 60)  # Cache le grand prix TTC
-BOX_TVA      = (500, 940, 160, 45)  # Cache la TVA
-BOX_HT       = (500, 990, 160, 45)  # Cache le HT
+BOX_CHARGE   = (500, 730, 160, 45)  
+BOX_TTC      = (450, 805, 210, 55)  
+BOX_TVA      = (500, 885, 160, 45)  
+BOX_HT       = (500, 935, 160, 45)  
 
 def build_ticket_image(date_str, depart, arrivee, distance, prix_ttc):
     ht  = prix_ttc / 1.10
     tva = prix_ttc - ht
 
-    # 1. Ouvrir l'image PNG
-    img_path = os.path.join(os.path.dirname(__file__), 'template.png')
+    # 1. Ouvrir l'image JPG
+    img_path = os.path.join(os.path.dirname(__file__), 'template.jpg')
     img = Image.open(img_path).convert("RGB")
     draw = ImageDraw.Draw(img)
 
-    # 2. Tailles de police
-    SIZE_NORMAL = 34
-    SIZE_TTC    = 52
+    # 2. Tailles de police (Légèrement réduites pour correspondre au JPG)
+    SIZE_NORMAL = 31
+    SIZE_TTC    = 46
 
     try:
         font = ImageFont.truetype(FONT_PATH, SIZE_NORMAL)
@@ -41,12 +41,13 @@ def build_ticket_image(date_str, depart, arrivee, distance, prix_ttc):
 
     # Couleurs
     COLOR_INK = (40, 40, 40)         # Gris thermique pour le texte
-    COLOR_PAPER = (255, 255, 255)    # Blanc pour masquer l'ancien texte
+    # Blanc légèrement "sale" pour fusionner avec le fond du scan
+    COLOR_PAPER = (248, 250, 250)    
 
     def hide_and_write(text, box, fnt=font, align='right'):
         x, y, w, h = box
         
-        # 1. Masquer l'ancien texte avec un rectangle blanc
+        # 1. Masquer l'ancien texte avec le rectangle couleur papier
         draw.rectangle([x, y, x + w, y + h], fill=COLOR_PAPER)
 
         # 2. Mesurer la taille du nouveau texte
