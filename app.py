@@ -7,41 +7,23 @@ app = Flask(__name__)
 # ── Font setup ──────────────────────────────────────────
 FONT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'OCR-B.ttf')
 
-# ⚠️ NOUVELLES COORDONNÉES AFFINÉES ⚠️
+# ⚠️ ZONES DE MASQUAGE ET D'ÉCRITURE (Pour template.png 739x2000) ⚠️
+# Format: (X_debut, Y_debut, Largeur, Hauteur)
+BOX_DATE     = (420, 390, 260, 45)  # Cache l'ancienne date
+BOX_DEP      = (230, 440, 110, 45)  # Cache l'ancienne heure de départ
+BOX_ARR      = (530, 440, 110, 45)  # Cache l'ancienne heure d'arrivée
+BOX_DIST     = (500, 490, 140, 45)  # Cache l'ancienne distance
 
-# --- LA DATE --- (Entre les slashes / / )
-X_DATE_J = 460   # Jour (23) - décalé à droite
-X_DATE_M = 510   # Mois (02) - décalé à gauche
-X_DATE_A = 595   # Année (2026) - décalé à gauche
+BOX_CHARGE   = (500, 785, 160, 45)  # Cache le prix de prise en charge
+BOX_TTC      = (450, 860, 210, 60)  # Cache le grand prix TTC
+BOX_TVA      = (500, 940, 160, 45)  # Cache la TVA
+BOX_HT       = (500, 990, 160, 45)  # Cache le HT
 
-# --- LES HEURES --- (Autour des deux points : )
-X_DEP_H  = 265   # Départ Heure (12) - décalé à droite
-X_DEP_M  = 305   # Départ Min (54) - décalé à gauche
-X_ARR_H  = 535   # Arrivée Heure (13) - décalé à gauche
-X_ARR_M  = 610   # Arrivée Min (52) - décalé à gauche
-
-# --- LA DISTANCE --- (Juste avant le 'km')
-X_DIST   = 635   # décalé à droite pour coller au 'km'
-
-# --- LES PRIX --- (Alignés à droite avant le '€')
-X_PRICE  = 645   # décalé à gauche pour ne pas toucher le €
-
-# --- POSITIONS Y --- (Hauteur : on remonte tout !)
-Y_DATE     = 375
-Y_HEURE    = 410
-Y_DISTANCE = 450
-
-Y_CHARGE   = 770
-Y_TTC      = 860
-Y_TVA      = 935
-Y_HT       = 985
-
-
-def build_ticket_image(jour, mois, annee, depart, arrivee, distance, prix_ttc):
+def build_ticket_image(date_str, depart, arrivee, distance, prix_ttc):
     ht  = prix_ttc / 1.10
     tva = prix_ttc - ht
 
-    # 1. Ouvrir le template 739x2000
+    # 1. Ouvrir l'image PNG
     img_path = os.path.join(os.path.dirname(__file__), 'template.png')
     img = Image.open(img_path).convert("RGB")
     draw = ImageDraw.Draw(img)
@@ -57,43 +39,40 @@ def build_ticket_image(jour, mois, annee, depart, arrivee, distance, prix_ttc):
         font = ImageFont.load_default()
         font_ttc = font
 
-    COLOR_INK = (40, 40, 40)
+    # Couleurs
+    COLOR_INK = (40, 40, 40)         # Gris thermique pour le texte
+    COLOR_PAPER = (255, 255, 255)    # Blanc pour masquer l'ancien texte
 
-    def write_text(text, x, y, fnt=font, align='right'):
+    def hide_and_write(text, box, fnt=font, align='right'):
+        x, y, w, h = box
+        
+        # 1. Masquer l'ancien texte avec un rectangle blanc
+        draw.rectangle([x, y, x + w, y + h], fill=COLOR_PAPER)
+
+        # 2. Mesurer la taille du nouveau texte
         bbox = draw.textbbox((0, 0), text, font=fnt)
         tw = bbox[2] - bbox[0]
         
+        # 3. Calculer l'alignement
         start_x = x
         if align == 'right':
-            start_x = x - tw 
+            start_x = x + w - tw 
 
+        # 4. Écrire le texte (avec effet gras)
         draw.text((start_x, y), text, font=fnt, fill=COLOR_INK)
         draw.text((start_x + 1, y), text, font=fnt, fill=COLOR_INK)
 
-    # --- ÉCRITURE SÉPARÉE SUR L'IMAGE ---
+    # --- REMPLACEMENT AUTOMATIQUE SUR L'IMAGE ---
     
-    # DATE
-    write_text(jour, x=X_DATE_J, y=Y_DATE, align='left')
-    write_text(mois, x=X_DATE_M, y=Y_DATE, align='left')
-    write_text(annee, x=X_DATE_A, y=Y_DATE, align='left')
+    hide_and_write(date_str, BOX_DATE, align='right')
+    hide_and_write(depart, BOX_DEP, align='left')
+    hide_and_write(arrivee, BOX_ARR, align='right')
+    hide_and_write(f"{distance}", BOX_DIST, align='right') 
     
-    # HEURES
-    dep_h, dep_m = depart.split(':')
-    arr_h, arr_m = arrivee.split(':')
-    
-    write_text(dep_h, x=X_DEP_H, y=Y_HEURE, align='left')
-    write_text(dep_m, x=X_DEP_M, y=Y_HEURE, align='left')
-    write_text(arr_h, x=X_ARR_H, y=Y_HEURE, align='left')
-    write_text(arr_m, x=X_ARR_M, y=Y_HEURE, align='left')
-    
-    # DISTANCE
-    write_text(f"{distance}", x=X_DIST, y=Y_DISTANCE, align='right') 
-    
-    # PRIX
-    write_text(f"2.94", x=X_PRICE, y=Y_CHARGE, align='right')
-    write_text(f"{prix_ttc:.2f}", x=X_PRICE, y=Y_TTC, fnt=font_ttc, align='right')
-    write_text(f"{tva:.2f}", x=X_PRICE, y=Y_TVA, align='right')
-    write_text(f"{ht:.2f}", x=X_PRICE, y=Y_HT, align='right')
+    hide_and_write("2.94", BOX_CHARGE, align='right')
+    hide_and_write(f"{prix_ttc:.2f}", BOX_TTC, fnt=font_ttc, align='right')
+    hide_and_write(f"{tva:.2f}", BOX_TVA, align='right')
+    hide_and_write(f"{ht:.2f}", BOX_HT, align='right')
 
     # 3. Sauvegarder en PDF
     buf = io.BytesIO()
@@ -106,7 +85,7 @@ HTML = '''<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ticket Taxi — Pillow Mod</title>
+<title>Ticket Taxi — Générateur</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{background:#e5e7eb;font-family:system-ui,sans-serif;display:flex;
@@ -126,11 +105,12 @@ HTML = '''<!DOCTYPE html>
 </head>
 <body>
 <div class="card">
-  <h1>🧾 Ticket Taxi (Pillow)</h1>
+  <h1>🧾 Ticket Taxi</h1>
+  <p>Veuillez entrer les informations de la course.</p>
   <form method="POST" action="/generate">
     <div class="grid">
       <div><label>Date</label><input name="date" type="date" required></div>
-      <div><label>Distance</label><input name="distance" type="number" step="0.1" placeholder="Ex: 64.8" required></div>
+      <div><label>Distance (km)</label><input name="distance" type="number" step="0.1" placeholder="Ex: 64.8" required></div>
     </div>
     <div class="grid">
       <div><label>Départ</label><input name="depart" type="time" required></div>
@@ -153,9 +133,10 @@ def index():
 def generate():
     raw_date = request.form['date']
     y, m, d  = raw_date.split('-')
+    date_str = f'{d}/{m}/{y}'
 
     buf = build_ticket_image(
-        d, m, y, 
+        date_str, 
         request.form['depart'], 
         request.form['arrivee'], 
         request.form['distance'], 
