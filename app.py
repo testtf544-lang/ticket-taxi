@@ -7,10 +7,10 @@ app = Flask(__name__)
 # ── Font setup ──────────────────────────────────────────
 FONT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'OCR-B.ttf')
 
-# ⚠️ NOUVELLES COORDONNÉES AFFINÉES (D'après la dernière capture) ⚠️
+# ⚠️ NOUVELLES COORDONNÉES AFFINÉES ⚠️
 
 # --- LA DATE --- (Entre les slashes / / )
-X_DATE_J = 410   # Jour (23) - décalé à droite
+X_DATE_J = 460   # Jour (23) - décalé à droite
 X_DATE_M = 510   # Mois (02) - décalé à gauche
 X_DATE_A = 595   # Année (2026) - décalé à gauche
 
@@ -31,7 +31,6 @@ Y_DATE     = 375
 Y_HEURE    = 410
 Y_DISTANCE = 450
 
-# J'ai aussi un peu remonté les prix au cas où
 Y_CHARGE   = 770
 Y_TTC      = 860
 Y_TVA      = 935
@@ -130,15 +129,15 @@ HTML = '''<!DOCTYPE html>
   <h1>🧾 Ticket Taxi (Pillow)</h1>
   <form method="POST" action="/generate">
     <div class="grid">
-      <div><label>Date</label><input name="date" type="date" value="2026-02-23" required></div>
-      <div><label>Distance</label><input name="distance" type="number" step="0.1" value="64.8" required></div>
+      <div><label>Date</label><input name="date" type="date" required></div>
+      <div><label>Distance</label><input name="distance" type="number" step="0.1" placeholder="Ex: 64.8" required></div>
     </div>
     <div class="grid">
-      <div><label>Départ</label><input name="depart" type="time" value="12:54" required></div>
-      <div><label>Arrivée</label><input name="arrivee" type="time" value="13:52" required></div>
+      <div><label>Départ</label><input name="depart" type="time" required></div>
+      <div><label>Arrivée</label><input name="arrivee" type="time" required></div>
     </div>
     <div class="full">
-      <label>Prix Total TTC (€)</label><input name="prix" type="number" step="0.01" value="135.24" required>
+      <label>Prix Total TTC (€)</label><input name="prix" type="number" step="0.01" placeholder="Ex: 135.24" required>
     </div>
     <button type="submit">⬇ Télécharger PDF</button>
   </form>
