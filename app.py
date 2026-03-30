@@ -7,30 +7,37 @@ app = Flask(__name__)
 # ── Font setup ──────────────────────────────────────────
 FONT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'OCR-B.ttf')
 
-# ⚠️ ZONES DE MASQUAGE ET D'ÉCRITURE AJUSTÉES (Tout est remonté pour s'adapter au JPG) ⚠️
-# Format: (X_debut, Y_debut, Largeur, Hauteur)
-BOX_DATE     = (420, 335, 260, 45)  # Remonté de 55px
-BOX_DEP      = (225, 385, 110, 45)  # Remonté de 55px
-BOX_ARR      = (520, 385, 110, 45)  
-BOX_DIST     = (500, 435, 140, 45)  
+# ── 1. KBER L-KTABA (FONT SIZE) ─────────────────────────
+SIZE_NORMAL = 30
+SIZE_TTC    = 44  
 
-BOX_CHARGE   = (500, 730, 160, 45)  
-BOX_TTC      = (450, 805, 210, 55)  
-BOX_TVA      = (500, 885, 160, 45)  
-BOX_HT       = (500, 935, 160, 45)  
+# ── 2. COORDONNÉES X (Les X dyalek) ─────────────────────
+X_DATE         = 707  
+X_DISTANCE     = 625  
+X_TTC          = 676  
+X_TVA_HT       = 675  
+
+X_DEPART       = 198  
+X_ARRIVEE      = 580  
+
+# ── 3. COORDONNÉES Y (Les Y dyalek) ─────────────────────
+Y_DATE     = 350
+Y_HEURE    = 385
+Y_DISTANCE = 419
+
+# ⚠️ Mola7ada: Ila bano lik l-ar9am hbtou lte7t bzaf b sbaab l-marge, n9ess mn had 823 (dir 810 matalan)
+Y_TTC      = 817
+Y_TVA      = 902
+Y_HT       = 942
 
 def build_ticket_image(date_str, depart, arrivee, distance, prix_ttc):
     ht  = prix_ttc / 1.10
     tva = prix_ttc - ht
 
-    # 1. Ouvrir l'image JPG
-    img_path = os.path.join(os.path.dirname(__file__), 'template.jpg')
+    # 1. Ouvrir l'image nettoyée
+    img_path = os.path.join(os.path.dirname(__file__), 'template.png')
     img = Image.open(img_path).convert("RGB")
     draw = ImageDraw.Draw(img)
-
-    # 2. Tailles de police (Légèrement réduites pour correspondre au JPG)
-    SIZE_NORMAL = 31
-    SIZE_TTC    = 46
 
     try:
         font = ImageFont.truetype(FONT_PATH, SIZE_NORMAL)
@@ -39,41 +46,56 @@ def build_ticket_image(date_str, depart, arrivee, distance, prix_ttc):
         font = ImageFont.load_default()
         font_ttc = font
 
-    # Couleurs
-    COLOR_INK = (40, 40, 40)         # Gris thermique pour le texte
-    # Blanc légèrement "sale" pour fusionner avec le fond du scan
-    COLOR_PAPER = (248, 250, 250)    
+    COLOR_INK = (40, 40, 40) 
 
-    def hide_and_write(text, box, fnt=font, align='right'):
-        x, y, w, h = box
-        
-        # 1. Masquer l'ancien texte avec le rectangle couleur papier
-        draw.rectangle([x, y, x + w, y + h], fill=COLOR_PAPER)
-
-        # 2. Mesurer la taille du nouveau texte
+    def write_text(text, x, y, fnt=font, align='right'):
         bbox = draw.textbbox((0, 0), text, font=fnt)
         tw = bbox[2] - bbox[0]
         
-        # 3. Calculer l'alignement
         start_x = x
         if align == 'right':
-            start_x = x + w - tw 
+            start_x = x - tw
+        elif align == 'left':
+            start_x = x
 
-        # 4. Écrire le texte (avec effet gras)
         draw.text((start_x, y), text, font=fnt, fill=COLOR_INK)
         draw.text((start_x + 1, y), text, font=fnt, fill=COLOR_INK)
 
-    # --- REMPLACEMENT AUTOMATIQUE SUR L'IMAGE ---
+    def write_stretched_text(text, x, y, fnt=font_ttc):
+        """
+        Fonction mrigla bash l-ktaba d l-TTC ma tt9te3sh mn l-te7t
+        """
+        bbox = draw.textbbox((0, 0), text, font=fnt)
+        w = bbox[2] - bbox[0]
+        
+        # HNA L-7EL: Khedina l-hauteur l-kbira (bbox[3]) w zedna 25 pixels d l-marge lte7t
+        safe_h = bbox[3] + 25 
+        
+        # Créer une image temporaire kbeeera bash mayt9te3 walo
+        temp_img = Image.new('RGBA', (w + 10, safe_h), (255, 255, 255, 0))
+        temp_draw = ImageDraw.Draw(temp_img)
+        
+        # Écrire le texte (N9i w lissé)
+        temp_draw.text((0, 0), text, font=fnt, fill=COLOR_INK)
+        
+        # ÉTIRER L'IMAGE (1.3)
+        new_h = int(safe_h * 1.3) 
+        stretched_img = temp_img.resize((w + 10, new_h), resample=Image.Resampling.LANCZOS)
+        
+        # Coller l'image étirée sur le ticket
+        start_x = x - w
+        img.paste(stretched_img, (start_x, y), mask=stretched_img)
+
+    # --- ÉCRITURE DIRECTE SUR L'IMAGE ---
+    write_text(date_str, X_DATE, Y_DATE, align='right')
+    write_text(depart, X_DEPART, Y_HEURE, align='left')
+    write_text(arrivee, X_ARRIVEE, Y_HEURE, align='left')
+    write_text(f"{distance}", X_DISTANCE, Y_DISTANCE, align='right') 
     
-    hide_and_write(date_str, BOX_DATE, align='right')
-    hide_and_write(depart, BOX_DEP, align='left')
-    hide_and_write(arrivee, BOX_ARR, align='right')
-    hide_and_write(f"{distance}", BOX_DIST, align='right') 
+    write_stretched_text(f"{prix_ttc:.2f}", X_TTC, Y_TTC)
     
-    hide_and_write("2.94", BOX_CHARGE, align='right')
-    hide_and_write(f"{prix_ttc:.2f}", BOX_TTC, fnt=font_ttc, align='right')
-    hide_and_write(f"{tva:.2f}", BOX_TVA, align='right')
-    hide_and_write(f"{ht:.2f}", BOX_HT, align='right')
+    write_text(f"{tva:.2f}", X_TVA_HT, Y_TVA, align='right')
+    write_text(f"{ht:.2f}", X_TVA_HT, Y_HT, align='right')
 
     # 3. Sauvegarder en PDF
     buf = io.BytesIO()
@@ -147,5 +169,5 @@ def generate():
     return send_file(buf, mimetype='application/pdf', as_attachment=True, download_name=f'Ticket_{d}-{m}-{y}.pdf')
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 5001)) 
     app.run(host='0.0.0.0', port=port)
